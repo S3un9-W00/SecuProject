@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>미로찾기 게임</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎮 미로찾기 게임</h1>
+            <p>스타트 지점에서 도착지점까지 도달하세요!</p>
+        </div>
+        
+        <div class="menu-card">
+            <h2>게임 시작</h2>
+            <form th:action="@{/game/start}" method="post" class="game-form">
+                <div class="form-group">
+                    <label for="size">미로 크기:</label>
+                    <input type="number" id="size" name="size" value="10" min="5" max="30" required>
+                    <small>5 이상의 숫자를 입력하세요 (권장: 10-15)</small>
+                </div>
+                <button type="submit" class="btn btn-primary">새 미로로 게임 시작</button>
+            </form>
+        </div>
+        
+        <div class="menu-card">
+            <h2>파일에서 불러오기</h2>
+            <form th:action="@{/game/load}" method="post" class="game-form">
+                <div class="form-group">
+                    <label for="filePath">파일 경로:</label>
+                    <input type="text" id="filePath" name="filePath" placeholder="예: maze.txt 또는 C:\mazes\maze.txt" required>
+                    <small>미로 파일의 경로를 입력하세요</small>
+                </div>
+                <button type="submit" class="btn btn-secondary">파일에서 미로 불러오기</button>
+            </form>
+        </div>
+        
+        <div class="info-card">
+            <h3>게임 방법</h3>
+            <ul>
+                <li><strong>목표:</strong> 스타트 지점(S)에서 도착지점(G)까지 도달하세요</li>
+                <li><strong>이동:</strong> 화살표 키 또는 방향 버튼으로 이동</li>
+                <li><strong>안개:</strong> 플레이어 주변 3×3 범위(양옆앞뒤대각선 1칸씩)만 보입니다</li>
+                <li><strong>아이템:</strong> ★를 획득하면 5×5 범위가 보입니다</li>
+                <li><strong>범례:</strong> ※ = 나, ○ = AI, S = 스타트, G = 도착, ★ = 아이템, ■ = 벽, · = 길</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
+
