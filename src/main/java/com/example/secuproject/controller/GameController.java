@@ -1,189 +1,135 @@
 package com.example.secuproject.controller;
 
-import com.example.secuproject.game.GameEngine;
-import com.example.secuproject.generator.MazeGenerator;
-import com.example.secuproject.model.Maze;
-import com.example.secuproject.model.MazeCell;
-import com.example.secuproject.model.Player;
-import com.example.secuproject.model.Position;
-import com.example.secuproject.util.MazeFileHandler;
+import com.example.secuproject.Maze_two;
+import com.example.secuproject.Service.MazeService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.servlet.http.HttpSession;
-import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
+/**
+ * 간단한 미로 게임 컨트롤러
+ * Maze_two와 Enemy만 사용하여 게임을 관리합니다
+ */
 @Controller
 public class GameController {
     
+    @Autowired
+    private MazeService mazeService;
+    
+    /**
+     * 메인 페이지
+     */
     @GetMapping("/")
     public String index() {
         return "index";
     }
     
+    /**
+     * 게임 시작
+     */
     @PostMapping("/game/start")
-    public String startGame(@RequestParam(defaultValue = "10") int size, HttpSession session) {
-        MazeGenerator generator = new MazeGenerator();
-        Maze maze = generator.generateMaze(size);
-        GameEngine gameEngine = new GameEngine(maze);
-        session.setAttribute("gameEngine", gameEngine);
+    public String startGame() {
+        mazeService.startGame();
         return "redirect:/game";
     }
     
-    @PostMapping("/game/load")
-    public String loadGame(@RequestParam String filePath, HttpSession session) {
-        try {
-            Maze maze = MazeFileHandler.loadMaze(filePath);
-            GameEngine gameEngine = new GameEngine(maze);
-            session.setAttribute("gameEngine", gameEngine);
-            return "redirect:/game";
-        } catch (Exception e) {
-            return "redirect:/?error=" + e.getMessage();
-        }
-    }
-    
+    /**
+     * 게임 화면
+     */
     @GetMapping("/game")
-    public String game(Model model, HttpSession session) {
-        GameEngine gameEngine = (GameEngine) session.getAttribute("gameEngine");
-        if (gameEngine == null) {
-            return "redirect:/";
-        }
-        
-        model.addAttribute("mazeData", getMazeData(gameEngine));
-        model.addAttribute("gameLog", gameEngine.getGameLog());
-        model.addAttribute("gameFinished", gameEngine.isGameFinished());
-        model.addAttribute("playerMe", getPlayerData(gameEngine.getPlayerMe()));
-        model.addAttribute("playerYou", getPlayerData(gameEngine.getPlayerYou()));
-        
+    public String game(Model model) {
+        MazeService.GameStatus status = mazeService.getStatus();
+        model.addAttribute("status", status);
         return "game";
     }
     
+    /**
+     * 플레이어 이동 (w/a/s/d)
+     * AI는 자동으로 움직이지 않음 (2초마다 별도로 움직임)
+     */
     @PostMapping("/game/move")
     @ResponseBody
-    public Map<String, Object> move(@RequestParam String direction, HttpSession session) {
+    public Map<String, Object> move(@RequestParam String direction) {
         Map<String, Object> response = new HashMap<>();
-        GameEngine gameEngine = (GameEngine) session.getAttribute("gameEngine");
         
-        if (gameEngine == null) {
+        if (direction == null || direction.isEmpty()) {
             response.put("success", false);
-            response.put("message", "게임이 시작되지 않았습니다.");
+            response.put("message", "방향을 입력해주세요.");
             return response;
         }
         
-        try {
-            GameEngine.Direction dir = GameEngine.Direction.valueOf(direction.toUpperCase());
-            boolean moved = gameEngine.movePlayer(gameEngine.getPlayerMe(), dir);
-            
-            response.put("success", true);
-            response.put("moved", moved);
-            response.put("mazeData", getMazeData(gameEngine));
-            response.put("gameLog", gameEngine.getGameLog());
-            response.put("gameFinished", gameEngine.isGameFinished());
-            response.put("playerMe", getPlayerData(gameEngine.getPlayerMe()));
-            response.put("playerYou", getPlayerData(gameEngine.getPlayerYou()));
-            
-            session.setAttribute("gameEngine", gameEngine);
-        } catch (Exception e) {
-            response.put("success", false);
-            response.put("message", e.getMessage());
-        }
+        char dir = direction.toLowerCase().charAt(0);
+        Maze_two.MoveResult result = mazeService.move(dir);
+        
+        // AI는 자동으로 움직이지 않음 (2초마다 별도로 움직임)
+        
+        MazeService.GameStatus status = mazeService.getStatus();
+        
+        response.put("success", result.moved);
+        response.put("moved", result.moved);
+        response.put("arrived", result.arrived);
+        response.put("message", result.message);
+        response.put("mazeView", status.mazeView);
+        response.put("playerX", status.playerX);
+        response.put("playerY", status.playerY);
+        response.put("enemyX", status.enemyX);
+        response.put("enemyY", status.enemyY);
+        response.put("gameFinished", status.gameFinished);
         
         return response;
     }
     
+    /**
+     * AI만 이동 (테스트용)
+     */
     @PostMapping("/game/ai-move")
     @ResponseBody
-    public Map<String, Object> aiMove(HttpSession session) {
+    public Map<String, Object> aiMove() {
         Map<String, Object> response = new HashMap<>();
-        GameEngine gameEngine = (GameEngine) session.getAttribute("gameEngine");
         
-        if (gameEngine == null) {
-            response.put("success", false);
-            response.put("message", "게임이 시작되지 않았습니다.");
-            return response;
-        }
+        mazeService.aiMove();
         
-        try {
-            // AI 이동
-            if (!gameEngine.getPlayerYou().isReachedGoal()) {
-                com.example.secuproject.ai.AIRobot aiRobot = new com.example.secuproject.ai.AIRobot(gameEngine);
-                GameEngine.Direction aiDirection = aiRobot.decideNextMove();
-                if (aiDirection != null) {
-                    gameEngine.movePlayer(gameEngine.getPlayerYou(), aiDirection);
-                }
-            }
-            
-            response.put("success", true);
-            response.put("mazeData", getMazeData(gameEngine));
-            response.put("gameLog", gameEngine.getGameLog());
-            response.put("gameFinished", gameEngine.isGameFinished());
-            response.put("playerMe", getPlayerData(gameEngine.getPlayerMe()));
-            response.put("playerYou", getPlayerData(gameEngine.getPlayerYou()));
-            
-            session.setAttribute("gameEngine", gameEngine);
-        } catch (Exception e) {
-            response.put("success", false);
-            response.put("message", e.getMessage());
-        }
+        MazeService.GameStatus status = mazeService.getStatus();
+        
+        response.put("success", true);
+        response.put("mazeView", status.mazeView);
+        response.put("enemyX", status.enemyX);
+        response.put("enemyY", status.enemyY);
+        response.put("gameFinished", status.gameFinished);
         
         return response;
     }
     
+    /**
+     * 게임 리셋
+     */
     @PostMapping("/game/reset")
-    public String resetGame(HttpSession session) {
-        session.removeAttribute("gameEngine");
+    public String resetGame() {
+        mazeService.reset();
         return "redirect:/";
     }
     
-    private Map<String, Object> getMazeData(GameEngine gameEngine) {
-        Map<String, Object> data = new HashMap<>();
-        Maze maze = gameEngine.getMaze();
-        int size = maze.getSize();
-        List<List<Map<String, Object>>> cells = new ArrayList<>();
+    /**
+     * 게임 상태 조회 (AJAX용)
+     */
+    @GetMapping("/game/status")
+    @ResponseBody
+    public Map<String, Object> getStatus() {
+        Map<String, Object> response = new HashMap<>();
+        MazeService.GameStatus status = mazeService.getStatus();
         
-        Player playerMe = gameEngine.getPlayerMe();
-        Player playerYou = gameEngine.getPlayerYou();
+        response.put("mazeView", status.mazeView);
+        response.put("playerX", status.playerX);
+        response.put("playerY", status.playerY);
+        response.put("enemyX", status.enemyX);
+        response.put("enemyY", status.enemyY);
+        response.put("gameStarted", status.gameStarted);
+        response.put("gameFinished", status.gameFinished);
         
-        for (int i = 0; i < size; i++) {
-            List<Map<String, Object>> row = new ArrayList<>();
-            for (int j = 0; j < size; j++) {
-                Map<String, Object> cell = new HashMap<>();
-                Position pos = new Position(i, j);
-                MazeCell mazeCell = maze.getCell(i, j);
-                
-                boolean isPlayerMe = pos.equals(playerMe.getPosition());
-                boolean isPlayerYou = pos.equals(playerYou.getPosition());
-                boolean isVisible = mazeCell.isVisible();
-                
-                cell.put("code", mazeCell.getCode());
-                cell.put("visible", isVisible);
-                cell.put("playerMe", isPlayerMe);
-                cell.put("playerYou", isPlayerYou);
-                
-                row.add(cell);
-            }
-            cells.add(row);
-        }
-        
-        data.put("size", size);
-        data.put("cells", cells);
-        return data;
-    }
-    
-    private Map<String, Object> getPlayerData(Player player) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("position", Map.of("x", player.getPosition().getX(), "y", player.getPosition().getY()));
-        data.put("hasItem", player.hasItem());
-        data.put("reachedGoal", player.isReachedGoal());
-        if (player.getFinishTime() > 0) {
-            data.put("finishTime", player.getFinishTime() / 1000.0);
-        }
-        return data;
+        return response;
     }
 }
-

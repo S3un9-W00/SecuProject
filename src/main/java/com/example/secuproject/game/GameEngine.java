@@ -23,18 +23,41 @@ public class GameEngine {
         
         // 스타트 지점에 플레이어 배치
         List<Position> starts = maze.getStartPositions();
+        Position startMe = null;
+        Position startYou = null;
+        
         if (starts.size() >= 2) {
-            playerMe = new Player(Player.PlayerType.ME, starts.get(0).copy());
-            playerYou = new Player(Player.PlayerType.YOU, starts.get(1).copy());
+            // 이동 가능한 첫 번째 스타트 지점 찾기
+            for (Position start : starts) {
+                if (maze.isWalkable(start)) {
+                    if (startMe == null) {
+                        startMe = start;
+                    } else if (startYou == null) {
+                        startYou = start;
+                        break;
+                    }
+                }
+            }
         } else if (starts.size() == 1) {
-            playerMe = new Player(Player.PlayerType.ME, starts.get(0).copy());
-            // 두 번째 플레이어는 첫 번째와 같은 위치에서 시작
-            playerYou = new Player(Player.PlayerType.YOU, starts.get(0).copy());
-        } else {
-            // 스타트 지점이 없으면 (0, 0)에서 시작
-            playerMe = new Player(Player.PlayerType.ME, new Position(0, 0));
-            playerYou = new Player(Player.PlayerType.YOU, new Position(0, 0));
+            // 이동 가능한 스타트 지점 찾기
+            for (Position start : starts) {
+                if (maze.isWalkable(start)) {
+                    startMe = start;
+                    break;
+                }
+            }
         }
+        
+        // 이동 가능한 스타트 지점이 없으면 찾기
+        if (startMe == null) {
+            startMe = findWalkablePosition(maze);
+        }
+        if (startYou == null) {
+            startYou = findWalkablePosition(maze, startMe);
+        }
+        
+        playerMe = new Player(Player.PlayerType.ME, startMe);
+        playerYou = new Player(Player.PlayerType.YOU, startYou);
         
         // 초기 가시성 업데이트
         updateVisibility();
@@ -166,6 +189,30 @@ public class GameEngine {
      */
     public boolean isGameFinished() {
         return playerMe.isReachedGoal();
+    }
+    
+    /**
+     * 이동 가능한 위치를 찾습니다
+     */
+    private Position findWalkablePosition(Maze maze) {
+        return findWalkablePosition(maze, null);
+    }
+    
+    /**
+     * 이동 가능한 위치를 찾습니다 (다른 위치와 다른 위치)
+     */
+    private Position findWalkablePosition(Maze maze, Position exclude) {
+        int size = maze.getSize();
+        for (int i = 1; i < size - 1; i++) {
+            for (int j = 1; j < size - 1; j++) {
+                Position pos = new Position(i, j);
+                if (maze.isWalkable(pos) && (exclude == null || !pos.equals(exclude))) {
+                    return pos;
+                }
+            }
+        }
+        // 찾지 못하면 (1, 1) 반환
+        return new Position(1, 1);
     }
     
     /**
