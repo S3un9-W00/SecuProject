@@ -6,7 +6,11 @@ import com.example.secuproject.util.MazeGenerator;
 import com.example.secuproject.util.MazeValidator;
 import org.springframework.stereotype.Service;
 
+import java.security.SecureRandom;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * 간단한 미로 게임 서비스
@@ -20,6 +24,7 @@ public class MazeService {
     private boolean gameFinished = false;
     private MazeGenerator generator;
     private MazeValidator validator;
+    private final SecureRandom random = new SecureRandom();
 
     public MazeService() {
         this.generator = new MazeGenerator();
@@ -53,6 +58,11 @@ public class MazeService {
             // 파일 읽기 실패 시 기본 미로 사용
             maze = new Maze_two();
         }
+
+        // 외부 맵에 아이템/함정이 없을 때 기본 배치 (스프링 플레이용)
+        ensureObjectIfMissing(maze.getMap(), 6, 1); // 횃불
+        ensureObjectIfMissing(maze.getMap(), 7, 1); // 망치
+        ensureObjectIfMissing(maze.getMap(), 8, 1); // 함정
         
         // Enemy는 플레이어와 다른 스타트 지점에서 시작
         int enemyStartX = findEnemyStartX();
@@ -191,6 +201,35 @@ public class MazeService {
         status.gameStarted = gameStarted;
         status.gameFinished = gameFinished;
         return status;
+    }
+
+    /**
+     * 맵에 지정된 코드가 최소 count개 있도록 비어있는 길(3)에 추가합니다.
+     * 외부 txt 맵에 아이템/함정이 없을 때도 웹 플레이가 심심하지 않도록 보강.
+     */
+    private void ensureObjectIfMissing(int[][] map, int code, int count) {
+        int existing = 0;
+        for (int[] row : map) {
+            for (int v : row) {
+                if (v == code) existing++;
+            }
+        }
+        if (existing >= count) return;
+
+        List<int[]> candidates = new ArrayList<>();
+        for (int i = 0; i < map.length; i++) {
+            for (int j = 0; j < map[0].length; j++) {
+                if (map[i][j] == 3) { // 길에만 배치
+                    candidates.add(new int[]{i, j});
+                }
+            }
+        }
+        Collections.shuffle(candidates, random);
+        int toPlace = Math.min(count - existing, candidates.size());
+        for (int k = 0; k < toPlace; k++) {
+            int[] p = candidates.get(k);
+            map[p[0]][p[1]] = code;
+        }
     }
 
     /**

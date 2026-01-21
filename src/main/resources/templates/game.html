@@ -22,6 +22,21 @@
             background: #f5f5f5;
             border-radius: 5px;
         }
+        .message-box {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            color: #334155;
+            min-height: 42px;
+        }
+        .legend {
+            margin-top: 12px;
+            font-size: 0.95em;
+            color: #475569;
+            line-height: 1.5;
+        }
     </style>
 </head>
 <body>
@@ -33,6 +48,12 @@
                 <p><strong>AI 위치:</strong> (<span th:text="${status.enemyX}">0</span>, <span th:text="${status.enemyY}">0</span>)</p>
                 <p th:if="${status.gameFinished}" style="color: green; font-weight: bold;">✓ 게임 완료!</p>
                 <p th:unless="${status.gameFinished}" style="color: blue;">진행 중...</p>
+                <div class="message-box" id="messageBox">이동/아이템/함정 결과 메시지가 여기에 표시됩니다.</div>
+                <div class="legend">
+                    <strong>범례</strong>:
+                    P=플레이어, E=AI, #=벽, .=길, G=도착,
+                    F=횃불(10초 5×5 시야), H=망치(벽 1회 파괴), X=함정(3초 이동 불가)
+                </div>
             </div>
         </div>
         
@@ -88,11 +109,39 @@
             })
             .then(response => response.json())
             .then(data => {
-                if (data.success || data.moved) {
-                    // 페이지 새로고침하여 미로 업데이트
-                    location.reload();
-                } else {
-                    alert(data.message || '이동할 수 없습니다!');
+                const messageBox = document.getElementById('messageBox');
+                if (messageBox) {
+                    messageBox.textContent = data.message || '...';
+                }
+
+                // 미로 텍스트 업데이트
+                const mazeText = document.querySelector('.maze-text');
+                if (mazeText && data.mazeView) {
+                    mazeText.textContent = data.mazeView;
+                }
+
+                // 플레이어 위치 업데이트
+                if (data.playerX !== undefined) {
+                    const playerXSpan = document.querySelector('.game-info p:nth-child(1) span:nth-child(1)');
+                    const playerYSpan = document.querySelector('.game-info p:nth-child(1) span:nth-child(2)');
+                    if (playerXSpan) playerXSpan.textContent = data.playerX;
+                    if (playerYSpan) playerYSpan.textContent = data.playerY;
+                }
+
+                // AI 위치 업데이트
+                if (data.enemyX !== undefined) {
+                    const enemyXSpan = document.querySelector('.game-info p:nth-child(2) span:nth-child(1)');
+                    const enemyYSpan = document.querySelector('.game-info p:nth-child(2) span:nth-child(2)');
+                    if (enemyXSpan) enemyXSpan.textContent = data.enemyX;
+                    if (enemyYSpan) enemyYSpan.textContent = data.enemyY;
+                }
+
+                // 게임 완료 처리
+                if (data.gameFinished) {
+                    const gameOverModal = document.getElementById('gameOverModal');
+                    if (gameOverModal) {
+                        gameOverModal.style.display = 'flex';
+                    }
                 }
             })
             .catch(error => {
@@ -186,7 +235,7 @@
                 gameOverModal.style.display = 'flex';
             }
             if (aiMoveInterval) {
-                clearInterval(aiMoveInterval);
+                clearTimeout(aiMoveInterval);
             }
         }
         

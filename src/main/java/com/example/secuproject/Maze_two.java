@@ -9,18 +9,24 @@ public class Maze_two {
     private int size;
     private int playerX;
     private int playerY;
-    private boolean itemEffect;
-    private long endTime;
+    // 시야 및 아이템 상태
+    private boolean torchEffect;        // 횃불 효과 (5x5)
+    private long torchEndTime;
     private int viewRange = 1;
+
+    // 함정/망치 상태
+    private long immobilizedUntil = 0;  // 함정에 걸리면 이동 불가 시간
+    private boolean hasHammer = false;  // 망치 보유 여부
+    private boolean hammerUsed = false; // 망치 1회 사용 여부
 
     public Maze_two() {
         size = 5;
         map = new int[][]{
                 {0, 3, 4, 3, 9},
-                {4, 3, 4, 3, 4},
+                {4, 7, 4, 3, 4}, // 7: 망치
                 {3, 3, 3, 3, 4},
-                {3, 4, 4, 6, 3},
-                {3, 3, 3, 4, 3}
+                {3, 4, 4, 6, 3}, // 6: 횃불
+                {3, 3, 8, 4, 3}  // 8: 함정
         };
         findStartSpot();
     }
@@ -33,11 +39,11 @@ public class Maze_two {
             // 기본 미로 사용
             size = 5;
             map = new int[][]{
-                    {0, 3, 4, 3, 9},
-                    {4, 3, 4, 3, 4},
-                    {3, 3, 3, 3, 4},
-                    {3, 4, 4, 6, 3},
-                    {3, 3, 3, 4, 3}
+                {0, 3, 4, 3, 9},
+                {4, 7, 4, 3, 4},
+                {3, 3, 3, 3, 4},
+                {3, 4, 4, 6, 3},
+                {3, 3, 8, 4, 3}
             };
         } else {
             size = generatedMap.length;
@@ -124,12 +130,12 @@ public class Maze_two {
      * @param enemyY Enemy Y 좌표 (-1이면 표시 안 함)
      */
     public String showMaze(int enemyX, int enemyY) {
-        long now = System.currentTimeMillis();
         StringBuilder sb = new StringBuilder();
 
-        if (itemEffect && now > endTime) {
-            sb.append("5초가 지나서 아이템 효과가 꺼집니다.\n");
-            itemEffect = false;
+        long now = System.currentTimeMillis();
+        if (torchEffect && now > torchEndTime) {
+            sb.append("횃불 효과가 꺼집니다.\n");
+            torchEffect = false;
             viewRange = 1;
         }
 
@@ -154,7 +160,11 @@ public class Maze_two {
                 } else if (map[i][j] == 9) {
                     sb.append(" G"); // 도착지점
                 } else if (map[i][j] == 6) {
-                    sb.append(" *"); // 아이템
+                    sb.append(" F"); // 횃불(Torch)
+                } else if (map[i][j] == 7) {
+                    sb.append(" H"); // 망치(Hammer)
+                } else if (map[i][j] == 8) {
+                    sb.append(" X"); // 함정(Trap)
                 } else {
                     sb.append(" ."); // 길
                 }
@@ -165,6 +175,13 @@ public class Maze_two {
     }
 
     public MoveResult move(char c) {
+        long now = System.currentTimeMillis();
+
+        if (now < immobilizedUntil) {
+            long remain = (immobilizedUntil - now + 999) / 1000;
+            return new MoveResult(false, false, "함정! " + remain + "초 동안 이동 불가");
+        }
+
         int nx = playerX;
         int ny = playerY;
 
@@ -178,6 +195,13 @@ public class Maze_two {
         }
 
         if (map[nx][ny] == 4) {
+            if (hasHammer && !hammerUsed) {
+                hammerUsed = true;
+                map[nx][ny] = 3; // 벽을 길로 변환
+                playerX = nx;
+                playerY = ny;
+                return new MoveResult(true, false, "망치로 벽을 깼습니다!");
+            }
             return new MoveResult(false, false, "벽입니다! 진입 불가");
         }
 
@@ -191,12 +215,21 @@ public class Maze_two {
         playerY = ny;
 
         String msg = "이동했습니다.";
-        if (map[nx][ny] == 6) {
-            msg = "아이템 효과 발동!";
-            itemEffect = true;
-            endTime = System.currentTimeMillis() + 5000;
-            viewRange = 2;
-            map[nx][ny] = 1;
+        int cell = map[nx][ny];
+        if (cell == 6) { // 횃불
+            msg = "횃불 획득! 10초간 시야 확장";
+            torchEffect = true;
+            torchEndTime = System.currentTimeMillis() + 10_000;
+            viewRange = 2; // 5x5
+            map[nx][ny] = 3;
+        } else if (cell == 7) { // 망치
+            msg = "망치 획득! 벽을 한 번 부술 수 있습니다.";
+            hasHammer = true;
+            map[nx][ny] = 3;
+        } else if (cell == 8) { // 함정
+            msg = "함정 발동! 3초간 이동 불가";
+            immobilizedUntil = System.currentTimeMillis() + 3_000;
+            map[nx][ny] = 3;
         }
 
         return new MoveResult(true, false, msg);
