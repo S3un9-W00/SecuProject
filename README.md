@@ -2,6 +2,7 @@
 
 ## 패치노트 (커밋 요약)
 - 1회 커밋: 스프링 게임 **횃불/망치/함정**(6/7/8) 동작 추가 (시야 10초 확장, 벽 1회 파괴, 3초 이동 불가)
+- 2회 커밋: **게임 로그 저장(Replay 시스템 - 1단계)** - 게임 중 플레이어/AI 이동, 아이템 사용 기록 (직렬화 .log 파일로 저장)
 
 ## 프로젝트 개요
 
@@ -604,6 +605,78 @@ java -jar build/libs/secuproject-0.0.1-SNAPSHOT.jar
 **주의사항**:
 - `maze.txt` 파일이 없으면 기본 미로를 사용합니다
 - 미로 파일은 프로젝트 루트 디렉토리에 있어야 합니다
+
+---
+
+## 📼 리플레이(Replay) 시스템 (과제 5)
+
+### 개요
+게임 진행 중 모든 이벤트(플레이어 이동, AI 이동, 아이템 획득, 함정 발동 등)를 기록하고, 게임 종료 후 로그 파일로 저장합니다. 향후 이 로그를 로드하여 게임을 재생할 수 있습니다.
+
+### 구조
+- **GameEvent**: 단일 이벤트 기록 (타입, 방향, 좌표, 메시지)
+- **GameLog**: 전체 게임 플레이 로그 (게임 ID, 시작/종료 시간, 미로 상태, 이벤트 리스트)
+- **GameLogger**: 로그 저장/로드 (직렬화 이용, `game_logs/` 디렉토리)
+
+### 기록 항목
+| 항목 | 설명 |
+|------|------|
+| timestamp | 이벤트 발생 시간 (ms) |
+| eventType | MOVE, AI_MOVE, ITEM_TORCH, ITEM_HAMMER, TRAP, ARRIVE |
+| direction | 이동 방향 (w/a/s/d) |
+| playerX, playerY | 플레이어 좌표 |
+| enemyX, enemyY | AI 좌표 |
+| message | 결과 메시지 ("망치로 벽을 깼습니다!" 등) |
+| success | 이동 성공 여부 |
+
+### 저장 위치
+```
+프로젝트 루트/
+└── game_logs/
+    ├── game_20260124_150230_abc12345.log
+    ├── game_20260124_151145_def67890.log
+    └── ...
+```
+
+### 사용 방법
+
+**1. 게임 시작 시 로그 자동 시작**
+```java
+// MazeService.startGame()에서 자동으로 호출
+gameLogger.startNewGame(maze.getSize(), maze.getMap(), 
+    playerX, playerY, enemyX, enemyY);
+```
+
+**2. 이동 및 이벤트 기록**
+```java
+// move(char dir) 메서드에서 자동으로 호출
+gameLogger.logEvent("MOVE", dir, playerX, playerY, enemyX, enemyY, message, success);
+
+// AI 이동도 자동 기록
+gameLogger.logEvent("AI_MOVE", ' ', playerX, playerY, enemyX, enemyY, "AI moved", true);
+```
+
+**3. 게임 종료 후 로그 저장**
+```java
+// GameController의 reset() 메서드에서 자동으로 호출
+String logFile = mazeService.reset(); // 자동 저장
+// 또는 수동 저장 (옵션)
+POST /game/save-log
+```
+
+### 저장된 로그 파일 예시
+```
+game_logs/game_20260124_150230_a1b2c3d4.log
+- GameLog 객체를 Java 직렬화 형태로 저장
+- 게임 ID, 시작 시간, 초기 미로 상태 포함
+- 모든 GameEvent 목록 포함
+```
+
+### 다음 단계 (과제 5-2: 재생)
+- `GameLogger.loadLog(filename)` 활용
+- 저장된 이벤트를 순서대로 재생
+- 웹 UI에서 "리플레이 보기" 버튼 추가
+- 속도 조절 (1배, 2배, 0.5배 등)
 
 ---
 

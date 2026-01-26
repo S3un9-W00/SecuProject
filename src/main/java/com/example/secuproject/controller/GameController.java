@@ -105,11 +105,14 @@ public class GameController {
     }
     
     /**
-     * 게임 리셋
+     * 게임 리셋 - 로그 저장 후 메인 페이지로
      */
     @PostMapping("/game/reset")
     public String resetGame() {
-        mazeService.reset();
+        String logFile = mazeService.reset();
+        if (logFile != null) {
+            System.out.println("🎮 게임 로그 저장됨: " + logFile);
+        }
         return "redirect:/";
     }
     
@@ -129,6 +132,27 @@ public class GameController {
         response.put("enemyY", status.enemyY);
         response.put("gameStarted", status.gameStarted);
         response.put("gameFinished", status.gameFinished);
+        
+        return response;
+    }
+
+    /**
+     * 게임 로그 저장 (선택사항 - 게임 종료 전에 수동 저장)
+     */
+    @PostMapping("/game/save-log")
+    @ResponseBody
+    public Map<String, Object> saveLog() {
+        Map<String, Object> response = new HashMap<>();
+        String logFile = mazeService.saveGameLog();
+        
+        if (logFile != null) {
+            response.put("success", true);
+            response.put("logFile", logFile);
+            response.put("message", "게임 로그가 저장되었습니다.");
+        } else {
+            response.put("success", false);
+            response.put("message", "로그 저장에 실패했습니다.");
+        }
         
         return response;
     }

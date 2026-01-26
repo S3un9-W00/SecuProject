@@ -2,6 +2,7 @@ package com.example.secuproject.Service;
 
 import com.example.secuproject.Maze_two;
 import com.example.secuproject.Enemy;
+import com.example.secuproject.log.GameLogger;
 import com.example.secuproject.util.MazeGenerator;
 import com.example.secuproject.util.MazeValidator;
 import org.springframework.stereotype.Service;
@@ -22,13 +23,17 @@ public class MazeService {
     private Enemy enemy; // AI 로봇 (오른손 법칙 사용)
     private boolean gameStarted = false;
     private boolean gameFinished = false;
+    private boolean playerArrived = false;
+    private boolean enemyArrived = false;
     private MazeGenerator generator;
     private MazeValidator validator;
     private final SecureRandom random = new SecureRandom();
+    private GameLogger gameLogger; // 게임 로그 기록기
 
     public MazeService() {
         this.generator = new MazeGenerator();
         this.validator = new MazeValidator();
+        this.gameLogger = new GameLogger();
     }
 
     /**
@@ -70,6 +75,12 @@ public class MazeService {
         enemy = new Enemy(maze, enemyStartX, enemyStartY, maze.getMap());
         gameStarted = true;
         gameFinished = false;
+        playerArrived = false;
+        enemyArrived = false;
+
+        // 게임 로그 시작
+        gameLogger.startNewGame(maze.getSize(), maze.getMap(),
+            maze.getPlayerX(), maze.getPlayerY(), enemyStartX, enemyStartY);
     }
 
     /**
@@ -154,9 +165,27 @@ public class MazeService {
         
         Maze_two.MoveResult result = maze.move(dir);
         
+        // 이동 로그 기록
+        gameLogger.logEvent(
+            "MOVE",
+            dir,
+            maze.getPlayerX(),
+            maze.getPlayerY(),
+            enemy != null ? enemy.getX() : -1,
+            enemy != null ? enemy.getY() : -1,
+            result.message,
+            result.moved
+        );
+        
         // 도착했는지 확인
         if (result.arrived) {
+            playerArrived = true;
             gameFinished = true;
+            // 게임 종료 시 로그 자동 저장
+            String logFile = gameLogger.finishAndSave(playerArrived, enemyArrived);
+            if (logFile != null) {
+                System.out.println("🎮 게임 완료 - 로그 저장됨: " + logFile);
+            }
         }
         
         return result;
@@ -169,23 +198,54 @@ public class MazeService {
         if (enemy != null && !gameFinished) {
             enemy.step();
             
+            // Enemy 이동 로그 기록
+            gameLogger.logEvent(
+                "AI_MOVE",
+                ' ',
+                maze.getPlayerX(),
+                maze.getPlayerY(),
+                enemy.getX(),
+                enemy.getY(),
+                "AI moved",
+                true
+            );
+            
             // Enemy가 도착지점에 도달했는지 확인
             int[][] map = maze.getMap();
             int ex = enemy.getX();
             int ey = enemy.getY();
             if (ex >= 0 && ex < map.length && ey >= 0 && ey < map[0].length) {
                 if (map[ex][ey] == 9) {
+                    enemyArrived = true;
                     gameFinished = true;
+                    // 게임 종료 시 로그 자동 저장
+                    String logFile = gameLogger.finishAndSave(playerArrived, enemyArrived);
+                    if (logFile != null) {
+                        System.out.println("🎮 게임 완료 - 로그 저장됨: " + logFile);
+                    }
                 }
             }
         }
     }
 
     /**
-     * 게임 리셋
+     * 게임 리셋 - 기존 로그 저장 후 새 게임 시작
      */
-    public void reset() {
+    public String reset() {
+        // 게임 종료 로그 저장
+        String logFile = null;
+        if (gameLogger.getCurrentLog() != null) {
+            logFile = gameLogger.finishAndSave(playerArrived, enemyArrived);
+        }
         startGame();
+        return logFile;
+    }
+
+    /**
+     * 게임 로그 저장 (게임 종료 시)
+     */
+    public String saveGameLog() {
+        return gameLogger.finishAndSave(playerArrived, enemyArrived);
     }
 
     /**
@@ -230,6 +290,13 @@ public class MazeService {
             int[] p = candidates.get(k);
             map[p[0]][p[1]] = code;
         }
+    }
+
+    /**
+     * 게임 로거 반환
+     */
+    public GameLogger getGameLogger() {
+        return gameLogger;
     }
 
     /**
