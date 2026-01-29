@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>리플레이 - 미로찾기</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <style>
+        .maze-text {
+            font-family: 'Courier New', monospace;
+            white-space: pre;
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 20px;
+            border-radius: 5px;
+            font-size: 18px;
+            line-height: 1.2;
+        }
+        .panel {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        select, input {
+            padding: 10px 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .meta {
+            margin-top: 10px;
+            color: #475569;
+            line-height: 1.5;
+        }
+        .message-box {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            color: #334155;
+            min-height: 42px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📼 리플레이</h1>
+            <p>저장된 게임 로그를 불러와 조작 과정을 재생합니다.</p>
+        </div>
+
+        <div class="panel">
+            <div class="controls">
+                <label for="logSelect"><strong>로그 파일</strong></label>
+                <select id="logSelect">
+                    <option value="">(선택)</option>
+                    <option th:each="f : ${logFiles}" th:value="${f}" th:text="${f}"></option>
+                </select>
+
+                <label for="speed"><strong>속도(배수)</strong></label>
+                <input id="speed" type="number" min="0.1" step="0.1" value="1.0" style="width: 90px;">
+
+                <button class="btn btn-primary" onclick="loadFrames()">불러오기</button>
+                <button class="btn btn-secondary" onclick="play()">재생</button>
+                <button class="btn btn-danger" onclick="pause()">일시정지</button>
+                <button class="btn" onclick="stepOnce()">한 프레임</button>
+                <a class="btn btn-primary" href="/" style="text-decoration:none;">메인</a>
+            </div>
+
+            <div class="meta" id="metaBox">
+                선택된 로그: <span id="selectedFile">(없음)</span> /
+                프레임: <span id="frameCount">0</span> /
+                현재: <span id="currentIndex">0</span>
+            </div>
+
+            <div class="message-box" id="messageBox">불러온 뒤 재생을 눌러주세요.</div>
+        </div>
+
+        <div class="panel">
+            <div class="maze-text" id="mazeText">여기에 리플레이가 표시됩니다.</div>
+        </div>
+    </div>
+
+    <script th:inline="javascript">
+        const preselected = /*[[${selectedLogFile}]]*/ null;
+        const logSelect = document.getElementById('logSelect');
+        if (preselected) {
+            logSelect.value = preselected;
+        }
+
+        let frames = [];
+        let idx = 0;
+        let playing = false;
+        let timerId = null;
+
+        function renderFrame(i) {
+            if (!frames || frames.length === 0) return;
+            const f = frames[Math.max(0, Math.min(i, frames.length - 1))];
+            const mazeText = document.getElementById('mazeText');
+            const messageBox = document.getElementById('messageBox');
+            const currentIndex = document.getElementById('currentIndex');
+            if (mazeText) mazeText.textContent = f.mazeView || '';
+            if (messageBox) messageBox.textContent = `${f.index}. ${f.eventType}(${f.direction || ' '}) | ${f.message || ''}`;
+            if (currentIndex) currentIndex.textContent = String(f.index);
+        }
+
+        function loadFrames() {
+            pause();
+            const file = logSelect.value;
+            document.getElementById('selectedFile').textContent = file || '(없음)';
+            fetch('/replay/frames?file=' + encodeURIComponent(file || ''))
+                .then(r => r.json())
+                .then(data => {
+                    frames = (data.frames || []);
+                    idx = 0;
+                    document.getElementById('frameCount').textContent = String(frames.length);
+                    if (frames.length > 0) {
+                        renderFrame(0);
+                    } else {
+                        document.getElementById('mazeText').textContent = '프레임이 없습니다. (로그 파일을 확인해주세요)';
+                        document.getElementById('messageBox').textContent = data && data.file ? `로드 실패: ${data.file}` : '로드 실패';
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    document.getElementById('messageBox').textContent = '로드 중 오류가 발생했습니다.';
+                });
+        }
+
+        function getSpeed() {
+            const v = parseFloat(document.getElementById('speed').value);
+            return (isFinite(v) && v > 0) ? v : 1.0;
+        }
+
+        function scheduleNext() {
+            if (!playing) return;
+            if (!frames || frames.length === 0) return;
+            if (idx >= frames.length - 1) {
+                playing = false;
+                return;
+            }
+
+            const speed = getSpeed();
+            const cur = frames[idx];
+            const next = frames[idx + 1];
+            const dt = Math.max(80, Math.min(1500, (next.offsetMillis - cur.offsetMillis) / speed)); // 80~1500ms로 클램프
+
+            timerId = setTimeout(() => {
+                if (!playing) return;
+                idx++;
+                renderFrame(idx);
+                scheduleNext();
+            }, dt);
+        }
+
+        function play() {
+            if (!frames || frames.length === 0) {
+                loadFrames();
+                return;
+            }
+            if (playing) return;
+            playing = true;
+            scheduleNext();
+        }
+
+        function pause() {
+            playing = false;
+            if (timerId) {
+                clearTimeout(timerId);
+                timerId = null;
+            }
+        }
+
+        function stepOnce() {
+            pause();
+            if (!frames || frames.length === 0) return;
+            idx = Math.min(idx + 1, frames.length - 1);
+            renderFrame(idx);
+        }
+
+        // 페이지 진입 시 자동 로드(최근 로그가 있으면)
+        if (preselected) {
+            loadFrames();
+        }
+    </script>
+</body>
+</html>
+

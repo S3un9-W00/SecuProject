@@ -4,10 +4,6 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * 전체 게임 플레이 로그를 관리합니다
- * JSON/직렬화 형태로 저장 가능합니다
- */
 public class GameLog implements Serializable {
     private static final long serialVersionUID = 1L;
 

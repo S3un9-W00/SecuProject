@@ -49,6 +49,9 @@
                 <p th:if="${status.gameFinished}" style="color: green; font-weight: bold;">✓ 게임 완료!</p>
                 <p th:unless="${status.gameFinished}" style="color: blue;">진행 중...</p>
                 <div class="message-box" id="messageBox">이동/아이템/함정 결과 메시지가 여기에 표시됩니다.</div>
+                <div th:if="${status.gameFinished}" style="margin-top: 10px;">
+                    <a class="btn btn-secondary" href="/replay" style="text-decoration:none;">리플레이 보기</a>
+                </div>
                 <div class="legend">
                     <strong>범례</strong>:
                     P=플레이어, E=AI, #=벽, .=길, G=도착,
@@ -90,9 +93,12 @@
             <div class="modal-content">
                 <h2>🎉 게임 완료!</h2>
                 <p>도착지점에 도달했습니다!</p>
-                <form th:action="@{/game/reset}" method="post">
-                    <button type="submit" class="btn btn-primary">새 게임 시작</button>
-                </form>
+                <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top: 10px;">
+                    <a class="btn btn-secondary" href="/replay" style="text-decoration:none;">리플레이 보기</a>
+                    <form th:action="@{/game/reset}" method="post" style="margin:0;">
+                        <button type="submit" class="btn btn-primary">새 게임 시작</button>
+                    </form>
+                </div>
             </div>
         </div>
     </div>

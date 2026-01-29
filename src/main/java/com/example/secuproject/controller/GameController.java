@@ -2,18 +2,16 @@ package com.example.secuproject.controller;
 
 import com.example.secuproject.Maze_two;
 import com.example.secuproject.Service.MazeService;
+import com.example.secuproject.replay.ReplayFrame;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
-/**
- * 간단한 미로 게임 컨트롤러
- * Maze_two와 Enemy만 사용하여 게임을 관리합니다
- */
 @Controller
 public class GameController {
     
@@ -154,6 +152,46 @@ public class GameController {
             response.put("message", "로그 저장에 실패했습니다.");
         }
         
+        return response;
+    }
+
+    /**
+     * 리플레이 페이지
+     */
+    @GetMapping("/replay")
+    public String replayPage(@RequestParam(required = false) String file, Model model) {
+        String selected = (file == null || file.isBlank()) ? mazeService.getLastSavedLogFile() : file;
+        model.addAttribute("selectedLogFile", selected);
+        model.addAttribute("logFiles", mazeService.listSavedLogFiles());
+        return "replay";
+    }
+
+    /**
+     * 저장된 로그 파일 목록 (AJAX용)
+     */
+    @GetMapping("/replay/logs")
+    @ResponseBody
+    public Map<String, Object> replayLogs() {
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("logFiles", mazeService.listSavedLogFiles());
+        response.put("lastSavedLogFile", mazeService.getLastSavedLogFile());
+        return response;
+    }
+
+    /**
+     * 로그 파일을 로드하여 리플레이 프레임 반환 (AJAX용)
+     */
+    @GetMapping("/replay/frames")
+    @ResponseBody
+    public Map<String, Object> replayFrames(@RequestParam(required = false) String file) {
+        Map<String, Object> response = new HashMap<>();
+        String selected = (file == null || file.isBlank()) ? mazeService.getLastSavedLogFile() : file;
+        List<ReplayFrame> frames = mazeService.loadReplayFrames(selected);
+        response.put("success", !frames.isEmpty());
+        response.put("file", selected);
+        response.put("frames", frames);
+        response.put("count", frames.size());
         return response;
     }
 }

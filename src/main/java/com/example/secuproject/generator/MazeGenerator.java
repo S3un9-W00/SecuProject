@@ -6,10 +6,6 @@ import com.example.secuproject.model.Position;
 
 import java.util.*;
 
-/**
- * 미로를 자동으로 생성하는 클래스
- * 스타트에서 도착지점까지 경로가 2개 이상 존재하도록 보장합니다
- */
 public class MazeGenerator {
     private Random random;
     

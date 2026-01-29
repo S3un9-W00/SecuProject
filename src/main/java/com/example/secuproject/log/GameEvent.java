@@ -2,10 +2,6 @@ package com.example.secuproject.log;
 
 import java.io.Serializable;
 
-/**
- * 게임 중 발생한 단일 이벤트를 기록합니다
- * (플레이어 이동, 아이템 획득, 함정 발동 등)
- */
 public class GameEvent implements Serializable {
     private static final long serialVersionUID = 1L;
     private long timestamp;           // 이벤트 발생 시간 (밀리초)

@@ -3,20 +3,21 @@ package com.example.secuproject.Service;
 import com.example.secuproject.Maze_two;
 import com.example.secuproject.Enemy;
 import com.example.secuproject.log.GameLogger;
+import com.example.secuproject.log.GameLog;
+import com.example.secuproject.replay.ReplayFrame;
+import com.example.secuproject.replay.ReplayGenerator;
 import com.example.secuproject.util.MazeGenerator;
 import com.example.secuproject.util.MazeValidator;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.io.IOException;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
-/**
- * 간단한 미로 게임 서비스
- * Maze_two와 Enemy만 사용하여 게임을 관리합니다
- */
 @Service
 public class MazeService {
     private Maze_two maze;
@@ -29,6 +30,7 @@ public class MazeService {
     private MazeValidator validator;
     private final SecureRandom random = new SecureRandom();
     private GameLogger gameLogger; // 게임 로그 기록기
+    private String lastSavedLogFile; // 최근 저장된 로그 파일 경로
 
     public MazeService() {
         this.generator = new MazeGenerator();
@@ -184,6 +186,7 @@ public class MazeService {
             // 게임 종료 시 로그 자동 저장
             String logFile = gameLogger.finishAndSave(playerArrived, enemyArrived);
             if (logFile != null) {
+                lastSavedLogFile = logFile;
                 System.out.println("🎮 게임 완료 - 로그 저장됨: " + logFile);
             }
         }
@@ -221,6 +224,7 @@ public class MazeService {
                     // 게임 종료 시 로그 자동 저장
                     String logFile = gameLogger.finishAndSave(playerArrived, enemyArrived);
                     if (logFile != null) {
+                        lastSavedLogFile = logFile;
                         System.out.println("🎮 게임 완료 - 로그 저장됨: " + logFile);
                     }
                 }
@@ -236,6 +240,9 @@ public class MazeService {
         String logFile = null;
         if (gameLogger.getCurrentLog() != null) {
             logFile = gameLogger.finishAndSave(playerArrived, enemyArrived);
+            if (logFile != null) {
+                lastSavedLogFile = logFile;
+            }
         }
         startGame();
         return logFile;
@@ -245,7 +252,11 @@ public class MazeService {
      * 게임 로그 저장 (게임 종료 시)
      */
     public String saveGameLog() {
-        return gameLogger.finishAndSave(playerArrived, enemyArrived);
+        String logFile = gameLogger.finishAndSave(playerArrived, enemyArrived);
+        if (logFile != null) {
+            lastSavedLogFile = logFile;
+        }
+        return logFile;
     }
 
     /**
@@ -297,6 +308,52 @@ public class MazeService {
      */
     public GameLogger getGameLogger() {
         return gameLogger;
+    }
+
+    /**
+     * 최근 저장된 로그 파일 경로
+     */
+    public String getLastSavedLogFile() {
+        return lastSavedLogFile;
+    }
+
+    /**
+     * 저장된 로그 파일 목록 (최신순)
+     */
+    public List<String> listSavedLogFiles() {
+        File dir = new File("game_logs");
+        if (!dir.exists() || !dir.isDirectory()) {
+            return List.of();
+        }
+
+        File[] files = dir.listFiles((d, name) -> name != null && name.endsWith(".log"));
+        if (files == null || files.length == 0) {
+            return List.of();
+        }
+
+        List<File> fileList = new ArrayList<>();
+        Collections.addAll(fileList, files);
+        fileList.sort(Comparator.comparingLong(File::lastModified).reversed());
+
+        List<String> paths = new ArrayList<>();
+        for (File f : fileList) {
+            paths.add(f.getPath());
+        }
+        return paths;
+    }
+
+    /**
+     * 로그 파일을 로드하여 리플레이 프레임으로 변환합니다.
+     */
+    public List<ReplayFrame> loadReplayFrames(String logFilePath) {
+        if (logFilePath == null || logFilePath.isBlank()) {
+            return List.of();
+        }
+        GameLog log = gameLogger.loadLog(logFilePath);
+        if (log == null) {
+            return List.of();
+        }
+        return ReplayGenerator.generateFrames(log);
     }
 
     /**

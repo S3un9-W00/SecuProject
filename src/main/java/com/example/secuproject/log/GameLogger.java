@@ -4,10 +4,6 @@ import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-/**
- * 게임 로그를 파일로 저장/로드합니다
- * 직렬화 방식으로 저장하여 모든 데이터 보존
- */
 public class GameLogger {
     private static final String LOG_DIR = "game_logs";
     private GameLog currentLog;

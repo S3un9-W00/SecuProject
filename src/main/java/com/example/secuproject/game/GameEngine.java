@@ -5,10 +5,6 @@ import com.example.secuproject.model.*;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * 게임의 핵심 로직을 처리하는 클래스
- * 플레이어 이동, 안개 시스템, 아이템 등을 관리합니다
- */
 public class GameEngine {
     private Maze maze;
     private Player playerMe; // 나 (플레이어 1)
