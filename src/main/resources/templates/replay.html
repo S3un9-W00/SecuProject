@@ -54,7 +54,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📼 리플레이</h1>
+            <h1>리플레이</h1>
             <p>저장된 게임 로그를 불러와 조작 과정을 재생합니다.</p>
         </div>
 
@@ -65,9 +65,6 @@
                     <option value="">(선택)</option>
                     <option th:each="f : ${logFiles}" th:value="${f}" th:text="${f}"></option>
                 </select>
-
-                <label for="speed"><strong>속도(배수)</strong></label>
-                <input id="speed" type="number" min="0.1" step="0.1" value="1.0" style="width: 90px;">
 
                 <button class="btn btn-primary" onclick="loadFrames()">불러오기</button>
                 <button class="btn btn-secondary" onclick="play()">재생</button>
@@ -136,11 +133,6 @@
                 });
         }
 
-        function getSpeed() {
-            const v = parseFloat(document.getElementById('speed').value);
-            return (isFinite(v) && v > 0) ? v : 1.0;
-        }
-
         function scheduleNext() {
             if (!playing) return;
             if (!frames || frames.length === 0) return;
@@ -149,10 +141,9 @@
                 return;
             }
 
-            const speed = getSpeed();
             const cur = frames[idx];
             const next = frames[idx + 1];
-            const dt = Math.max(80, Math.min(1500, (next.offsetMillis - cur.offsetMillis) / speed)); // 80~1500ms로 클램프
+            const dt = Math.max(80, Math.min(1500, (next.offsetMillis - cur.offsetMillis))); // 1배속 고정 (80~1500ms 클램프)
 
             timerId = setTimeout(() => {
                 if (!playing) return;
