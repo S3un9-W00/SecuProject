@@ -39,7 +39,7 @@ public class ReplayGenerator {
         initial.enemyY = log.getInitialEnemyY();
         initial.message = "리플레이 시작";
         initial.success = true;
-        initial.mazeView = maze.showMaze(initial.enemyX, initial.enemyY);
+        initial.mazeView = maze.showMazeNoFog(initial.enemyX, initial.enemyY);
         frames.add(initial);
 
         int enemyX = log.getInitialEnemyX();
@@ -73,7 +73,7 @@ public class ReplayGenerator {
             f.enemyY = e.getEnemyY();
             f.message = e.getMessage();
             f.success = e.isSuccess();
-            f.mazeView = maze.showMaze(enemyX, enemyY);
+            f.mazeView = maze.showMazeNoFog(enemyX, enemyY);
             frames.add(f);
         }
 

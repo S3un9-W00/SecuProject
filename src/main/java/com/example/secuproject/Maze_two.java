@@ -123,6 +123,40 @@ public class Maze_two {
     public String showMaze() {
         return showMaze(-1, -1); // Enemy 위치 없이 표시
     }
+
+    /**
+     * 안개 없이 전체 맵을 표시합니다 (리플레이용)
+     * @param enemyX Enemy X 좌표 (-1이면 표시 안 함)
+     * @param enemyY Enemy Y 좌표 (-1이면 표시 안 함)
+     */
+    public String showMazeNoFog(int enemyX, int enemyY) {
+        StringBuilder sb = new StringBuilder();
+
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < size; j++) {
+                // 플레이어와 Enemy 위치 우선 표시
+                if (i == playerX && j == playerY) {
+                    sb.append(" P"); // 플레이어
+                } else if (enemyX >= 0 && enemyY >= 0 && i == enemyX && j == enemyY) {
+                    sb.append(" E"); // Enemy
+                } else if (map[i][j] == 4) {
+                    sb.append(" #"); // 벽
+                } else if (map[i][j] == 9) {
+                    sb.append(" G"); // 도착지점
+                } else if (map[i][j] == 6) {
+                    sb.append(" F"); // 횃불(Torch)
+                } else if (map[i][j] == 7) {
+                    sb.append(" H"); // 망치(Hammer)
+                } else if (map[i][j] == 8) {
+                    sb.append(" X"); // 함정(Trap)
+                } else {
+                    sb.append(" ."); // 길
+                }
+            }
+            sb.append("\n");
+        }
+        return sb.toString();
+    }
     
     /**
      * Enemy 위치를 포함하여 미로를 표시합니다
