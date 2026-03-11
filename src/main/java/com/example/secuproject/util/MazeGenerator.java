@@ -4,177 +4,305 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.LinkedList;
-import java.util.Queue;
-import java.util.Random;
+import java.util.*;
 
-/**
- * 미로 제네레이터
- * 랜덤 미로를 생성합니다
- */
 public class MazeGenerator {
     private Random random;
+    
+    private static final int[] DX = {-1, 1, 0, 0};
+    private static final int[] DY = {0, 0, -1, 1};
+    private static final int MAX_GENERATION_ATTEMPTS = 50;
     
     public MazeGenerator() {
         this.random = new Random();
     }
     
-    /**
-     * N × N 크기의 랜덤 미로를 생성합니다
-     * @param size 미로 크기
-     * @return 생성된 미로 맵 (2차원 배열)
-     */
     public int[][] generateMaze(int size) {
         if (size < 5) {
-            size = 5; // 최소 크기
+            size = 5;
         }
         
-        int[][] map = new int[size][size];
+        for (int attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {
+            int[][] map = initializeAllWalls(size);
+            
+            int[][] starts = placeStartPoints(map, size);
+            
+            generateMazeWithPrims(map, starts, size);
+            
+            int[] goal = placeGoalAtDepth(map, starts, size);
+            if (goal == null) {
+                continue;
+            }
+            
+            if (validateMinimumPathLength(map, starts, goal, size)) {
+                placeItems(map, size);
+                return map;
+            }
+        }
         
-        // 1. 모든 칸을 벽(4)으로 초기화
+        return generateFallbackMaze(size);
+    }
+    
+    private int[][] initializeAllWalls(int size) {
+        int[][] map = new int[size][size];
         for (int i = 0; i < size; i++) {
             for (int j = 0; j < size; j++) {
                 map[i][j] = 4;
             }
         }
-        
-        // 2. 중앙 부분에 길(3)을 랜덤하게 생성
-        for (int i = 1; i < size - 1; i++) {
-            for (int j = 1; j < size - 1; j++) {
-                if (random.nextDouble() < 0.6) { // 60% 확률로 길 생성
-                    map[i][j] = 3;
-                }
-            }
-        }
-        
-        // 3. 스타트 지점 2개 배치 (맨 위쪽 중앙, 맨 아래쪽 중앙)
-        int start1X = 1;
-        int start1Y = size / 2;
-        int start2X = size - 2;
-        int start2Y = size / 2;
-        
-        map[start1X][start1Y] = 0;
-        map[start2X][start2Y] = 0;
-        
-        // 스타트 지점 주변을 길로 만들기
-        makePathAround(map, start1X, start1Y, size);
-        makePathAround(map, start2X, start2Y, size);
-        
-        // 4. 도착지점 배치 (중앙 근처)
-        int goalX = size / 2;
-        int goalY = size / 2;
-        map[goalX][goalY] = 9;
-        makePathAround(map, goalX, goalY, size);
-        
-        // 5. 스타트에서 도착지점까지 경로 보장
-        ensurePath(map, start1X, start1Y, goalX, goalY, size);
-        ensurePath(map, start2X, start2Y, goalX, goalY, size);
-        
-        // 6. 아이템 배치
-        placeItems(map, size);
-        
         return map;
     }
     
-    /**
-     * 특정 위치 주변을 길로 만듭니다
-     */
-    private void makePathAround(int[][] map, int x, int y, int size) {
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                int nx = x + dx;
-                int ny = y + dy;
-                if (nx >= 1 && nx < size - 1 && ny >= 1 && ny < size - 1) {
-                    if (map[nx][ny] == 4) {
-                        map[nx][ny] = 3;
+    private int[][] placeStartPoints(int[][] map, int size) {
+        int[][] starts = new int[2][2];
+        
+        // 랜덤 위치에 스타트 배치
+        List<int[]> candidates = new ArrayList<>();
+        
+        for (int i = 1; i < size - 1; i++) {
+            candidates.add(new int[]{i, 1});
+        }
+        
+        for (int i = 1; i < size - 1; i++) {
+            candidates.add(new int[]{1, i});
+        }
+        
+        Collections.shuffle(candidates, random);
+        
+        int[] start1 = candidates.get(0);
+        map[start1[0]][start1[1]] = 0;
+        starts[0][0] = start1[0];
+        starts[0][1] = start1[1];
+        
+        List<int[]> candidates2 = new ArrayList<>();
+        
+        for (int i = 1; i < size - 1; i++) {
+            candidates2.add(new int[]{i, size - 2});
+        }
+        
+        for (int i = 1; i < size - 1; i++) {
+            candidates2.add(new int[]{size - 2, i});
+        }
+        
+        Collections.shuffle(candidates2, random);
+        
+        int[] start2 = candidates2.get(0);
+        map[start2[0]][start2[1]] = 0;
+        starts[1][0] = start2[0];
+        starts[1][1] = start2[1];
+        
+        return starts;
+    }
+    
+    private void generateMazeWithPrims(int[][] map, int[][] starts, int size) {
+        Set<String> visited = new HashSet<>();
+        
+        visited.add(starts[0][0] + "," + starts[0][1]);
+        visited.add(starts[1][0] + "," + starts[1][1]);
+        
+        carveMazeDFS(map, starts[0][0], starts[0][1], size, visited, -1);
+        
+        String key2 = starts[1][0] + "," + starts[1][1];
+        if (!visited.contains(key2) || calculateShortestPath(map, starts[0][0], starts[0][1], starts[1][0], starts[1][1]) < 0) {
+            carvePathBetweenStarts(map, starts, visited, size);
+        }
+    }
+    
+    private void carveMazeDFS(int[][] map, int x, int y, int size, Set<String> visited, int lastDir) {
+        Stack<int[]> stack = new Stack<>();
+        stack.push(new int[]{x, y, lastDir});
+        
+        while (!stack.isEmpty()) {
+            int[] current = stack.peek();
+            int cx = current[0], cy = current[1], prevDir = current[2];
+            
+            List<int[]> neighbors = new ArrayList<>();
+            for (int dir = 0; dir < 4; dir++) {
+                int nx = cx + DX[dir] * 2;
+                int ny = cy + DY[dir] * 2;
+                
+                if (nx > 0 && nx < size - 1 && ny > 0 && ny < size - 1) {
+                    String key = nx + "," + ny;
+                    if (!visited.contains(key)) {
+                        neighbors.add(new int[]{nx, ny, dir});
                     }
                 }
             }
+            
+            if (neighbors.isEmpty()) {
+                stack.pop();
+                continue;
+            }
+            
+        int[] chosen = null;
+        if (prevDir >= 0 && random.nextDouble() < 0.3) {
+                for (int[] n : neighbors) {
+                    if (n[2] == prevDir) {
+                        chosen = n;
+                        break;
+                    }
+                }
+            }
+            if (chosen == null) {
+                chosen = neighbors.get(random.nextInt(neighbors.size()));
+            }
+            
+            int nx = chosen[0], ny = chosen[1], dir = chosen[2];
+            
+            int wx = cx + DX[dir];
+            int wy = cy + DY[dir];
+            
+            map[wx][wy] = 3;
+            map[nx][ny] = 3;
+            
+            visited.add(wx + "," + wy);
+            visited.add(nx + "," + ny);
+            
+            stack.push(new int[]{nx, ny, dir});
         }
     }
     
-    /**
-     * 두 지점 사이에 경로를 보장합니다
-     */
-    private void ensurePath(int[][] map, int startX, int startY, int goalX, int goalY, int size) {
-        // BFS로 경로 확인
-        if (!hasPath(map, startX, startY, goalX, goalY, size)) {
-            // 경로가 없으면 경로 생성
-            createPath(map, startX, startY, goalX, goalY, size);
-        }
-    }
-    
-    /**
-     * 두 지점 사이에 경로가 있는지 확인 (BFS)
-     */
-    private boolean hasPath(int[][] map, int startX, int startY, int goalX, int goalY, int size) {
+    private void carvePathBetweenStarts(int[][] map, int[][] starts, Set<String> visited, int size) {
+        int start1X = starts[0][0], start1Y = starts[0][1];
+        int start2X = starts[1][0], start2Y = starts[1][1];
+        
         Queue<int[]> queue = new LinkedList<>();
-        boolean[][] visited = new boolean[size][size];
+        Map<String, int[]> parent = new HashMap<>();
         
+        String key2 = start2X + "," + start2Y;
+        queue.add(new int[]{start2X, start2Y});
+        parent.put(key2, null);
+        
+        int[] target = null;
+        while (!queue.isEmpty() && target == null) {
+            int[] curr = queue.poll();
+            
+            for (int i = 0; i < 4; i++) {
+                int nx = curr[0] + DX[i];
+                int ny = curr[1] + DY[i];
+                
+                if (nx <= 0 || nx >= size - 1 || ny <= 0 || ny >= size - 1) continue;
+                
+                String nkey = nx + "," + ny;
+                if (parent.containsKey(nkey)) continue;
+                
+                parent.put(nkey, curr);
+                
+                if (map[nx][ny] == 3 || map[nx][ny] == 0) {
+                    target = new int[]{nx, ny};
+                    break;
+                }
+                
+                queue.add(new int[]{nx, ny});
+            }
+        }
+        
+        if (target != null) {
+            int[] curr = target;
+            while (curr != null) {
+                String key = curr[0] + "," + curr[1];
+                if (map[curr[0]][curr[1]] == 4) {
+                    map[curr[0]][curr[1]] = 3;
+                    visited.add(key);
+                }
+                curr = parent.get(key);
+            }
+        }
+    }
+    
+    private int[] placeGoalAtDepth(int[][] map, int[][] starts, int size) {
+        int minDepth = size * 2;
+        
+        List<int[]> walkableCells = new ArrayList<>();
+        for (int i = 1; i < size - 1; i++) {
+            for (int j = 1; j < size - 1; j++) {
+                if (map[i][j] == 3) {
+                    walkableCells.add(new int[]{i, j});
+                }
+            }
+        }
+        
+        List<int[]> candidates = new ArrayList<>();
+        
+        for (int[] cell : walkableCells) {
+            boolean validForAllStarts = true;
+            
+            for (int[] start : starts) {
+                int dist = calculateShortestPath(map, start[0], start[1], cell[0], cell[1]);
+                if (dist < 0 || dist < minDepth) {
+                    validForAllStarts = false;
+                    break;
+                }
+            }
+            
+            if (validForAllStarts) {
+                candidates.add(cell);
+            }
+        }
+        
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        
+        int[] goal = candidates.get(random.nextInt(candidates.size()));
+        map[goal[0]][goal[1]] = 9;
+        return goal;
+    }
+    
+    private int calculateShortestPath(int[][] map, int startX, int startY, int goalX, int goalY) {
+        int size = map.length;
+        Queue<int[]> queue = new LinkedList<>();
+        Map<String, Integer> distance = new HashMap<>();
+        
+        String startKey = startX + "," + startY;
         queue.add(new int[]{startX, startY});
-        visited[startX][startY] = true;
-        
-        int[] dx = {-1, 1, 0, 0};
-        int[] dy = {0, 0, -1, 1};
+        distance.put(startKey, 0);
         
         while (!queue.isEmpty()) {
             int[] current = queue.poll();
-            int x = current[0];
-            int y = current[1];
+            String currentKey = current[0] + "," + current[1];
+            int currentDist = distance.get(currentKey);
             
-            if (x == goalX && y == goalY) {
-                return true;
+            if (current[0] == goalX && current[1] == goalY) {
+                return currentDist;
             }
             
             for (int i = 0; i < 4; i++) {
-                int nx = x + dx[i];
-                int ny = y + dy[i];
+                int nx = current[0] + DX[i];
+                int ny = current[1] + DY[i];
+                String key = nx + "," + ny;
                 
-                if (nx >= 0 && nx < size && ny >= 0 && ny < size && !visited[nx][ny]) {
-                    if (map[nx][ny] != 4) { // 벽이 아니면 이동 가능
-                        visited[nx][ny] = true;
+                if (nx >= 0 && nx < size && ny >= 0 && ny < size && !distance.containsKey(key)) {
+                    if (map[nx][ny] == 3 || map[nx][ny] == 9 || map[nx][ny] == 0) {
+                        distance.put(key, currentDist + 1);
                         queue.add(new int[]{nx, ny});
                     }
                 }
             }
         }
         
-        return false;
+        return -1;
     }
     
-    /**
-     * 두 지점 사이에 경로를 생성합니다
-     */
-    private void createPath(int[][] map, int startX, int startY, int goalX, int goalY, int size) {
-        int currentX = startX;
-        int currentY = startY;
+    private boolean validateMinimumPathLength(int[][] map, int[][] starts, int[] goal, int size) {
+        int minimumRequired = size * 2;
         
-        while (!(currentX == goalX && currentY == goalY)) {
-            // 목표 방향으로 이동
-            int dx = Integer.compare(goalX, currentX);
-            int dy = Integer.compare(goalY, currentY);
-            
-            if (dx != 0) {
-                currentX += dx;
-            } else if (dy != 0) {
-                currentY += dy;
-            }
-            
-            if (currentX >= 0 && currentX < size && currentY >= 0 && currentY < size) {
-                if (map[currentX][currentY] == 4) {
-                    map[currentX][currentY] = 3; // 벽을 길로 변경
-                }
-            } else {
-                break;
+        if (goal == null) {
+            return false;
+        }
+        
+        for (int[] start : starts) {
+            int pathLength = calculateShortestPath(map, start[0], start[1], goal[0], goal[1]);
+            if (pathLength < 0 || pathLength < minimumRequired) {
+                return false;
             }
         }
+        
+        return true;
     }
     
-    /**
-     * 아이템을 배치합니다
-     */
     private void placeItems(int[][] map, int size) {
-        int itemCount = size / 3; // 미로 크기에 비례
+        int itemCount = size / 3;
         
         for (int i = 0; i < itemCount; i++) {
             int attempts = 0;
@@ -182,9 +310,8 @@ public class MazeGenerator {
                 int x = 1 + random.nextInt(size - 2);
                 int y = 1 + random.nextInt(size - 2);
                 
-                // 길 위에만 아이템 배치
                 if (map[x][y] == 3) {
-                    map[x][y] = 6; // 아이템
+                    map[x][y] = 6;
                     break;
                 }
                 attempts++;
@@ -192,14 +319,58 @@ public class MazeGenerator {
         }
     }
     
-    /**
-     * 미로를 텍스트 파일로 저장합니다
-     */
+    private int[][] generateFallbackMaze(int size) {
+        int[][] map = initializeAllWalls(size);
+        int[][] starts = placeStartPoints(map, size);
+        generateMazeWithPrims(map, starts, size);
+        
+        List<int[]> walkableCells = new ArrayList<>();
+        for (int i = 1; i < size - 1; i++) {
+            for (int j = 1; j < size - 1; j++) {
+                if (map[i][j] == 3) {
+                    walkableCells.add(new int[]{i, j});
+                }
+            }
+        }
+        
+        int[] bestGoal = null;
+        int bestMinDist = -1;
+        
+        for (int[] cell : walkableCells) {
+            int minDistFromStarts = Integer.MAX_VALUE;
+            boolean reachable = true;
+            
+            for (int[] start : starts) {
+                int dist = calculateShortestPath(map, start[0], start[1], cell[0], cell[1]);
+                if (dist < 0) {
+                    reachable = false;
+                    break;
+                }
+                minDistFromStarts = Math.min(minDistFromStarts, dist);
+            }
+            
+            if (reachable && minDistFromStarts > bestMinDist) {
+                bestMinDist = minDistFromStarts;
+                bestGoal = cell;
+            }
+        }
+        
+        if (bestGoal != null) {
+            map[bestGoal[0]][bestGoal[1]] = 9;
+        } else if (!walkableCells.isEmpty()) {
+            int[] goal = walkableCells.get(random.nextInt(walkableCells.size()));
+            map[goal[0]][goal[1]] = 9;
+        }
+        
+        placeItems(map, size);
+        
+        return map;
+    }
+    
     public void saveToFile(int[][] map, String filePath) throws IOException {
         File file = new File(filePath);
         File parentDir = file.getParentFile();
         
-        // 부모 디렉토리가 있고 존재하지 않으면 생성
         if (parentDir != null && !parentDir.exists()) {
             parentDir.mkdirs();
         }
@@ -218,14 +389,11 @@ public class MazeGenerator {
         }
     }
     
-    /**
-     * 메인 함수 - 미로를 생성하고 파일로 저장
-     */
     public static void main(String[] args) {
         MazeGenerator generator = new MazeGenerator();
         MazeValidator validator = new MazeValidator();
         
-        int size = 10; // 기본 크기
+        int size = 10;
         if (args.length > 0) {
             try {
                 size = Integer.parseInt(args[0]);
@@ -234,14 +402,13 @@ public class MazeGenerator {
             }
         }
         
-        String filePath = "maze.txt"; // 기본 파일명
+        String filePath = "maze.txt";
         if (args.length > 1) {
             filePath = args[1];
         }
         
         System.out.println("미로 생성 중... (크기: " + size + "x" + size + ")");
         
-        // 미로 생성 및 검증
         int attempts = 0;
         int[][] map = null;
         while (attempts < 10) {
@@ -260,7 +427,6 @@ public class MazeGenerator {
             return;
         }
         
-        // 파일로 저장
         try {
             generator.saveToFile(map, filePath);
             System.out.println("미로가 저장되었습니다: " + filePath);
@@ -269,4 +435,3 @@ public class MazeGenerator {
         }
     }
 }
-

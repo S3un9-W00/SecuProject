@@ -142,11 +142,30 @@
                     if (enemyYSpan) enemyYSpan.textContent = data.enemyY;
                 }
 
-                // 게임 완료 처리
-                if (data.gameFinished) {
-                    const gameOverModal = document.getElementById('gameOverModal');
-                    if (gameOverModal) {
-                        gameOverModal.style.display = 'flex';
+                // 도착 처리
+                if (data.arrived || data.playerArrived || data.enemyArrived) {
+                    // 이동 버튼 비활성화
+                    document.querySelectorAll('.btn-direction').forEach(btn => btn.disabled = true);
+                    
+                    if (data.gameFinished) {
+                        // 둘 다 도착: 게임 종료 modal
+                        const gameOverModal = document.getElementById('gameOverModal');
+                        if (gameOverModal) {
+                            gameOverModal.style.display = 'flex';
+                        }
+                    } else {
+                        // 한 명만 도착: 아래에 통과 메시지
+                        let passMessage = "";
+                        if (data.playerArrived && !data.enemyArrived) {
+                            passMessage = "🎯 플레이어 통과!";
+                        } else if (data.enemyArrived && !data.playerArrived) {
+                            passMessage = "🤖 AI 통과!";
+                        }
+                        if (passMessage && messageBox) {
+                            messageBox.textContent = passMessage;
+                            messageBox.style.background = "#fff3cd";
+                            messageBox.style.borderColor = "#ffc107";
+                        }
                     }
                 }
             })
@@ -196,7 +215,40 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        // 게임이 끝났으면 페이지 새로고침
+                        // 도착 처리
+                        if (data.enemyArrived || data.playerArrived) {
+                            // AI 이동 중단
+                            if (aiMoveInterval) {
+                                clearTimeout(aiMoveInterval);
+                            }
+                            
+                            // 플레이어만 도착: 버튼 비활성화
+                            // Enemy만 도착: 버튼 활성화 (플레이어가 이동할 수 있게)
+                            if (data.playerArrived && !data.enemyArrived) {
+                                document.querySelectorAll('.btn-direction').forEach(btn => btn.disabled = true);
+                            }
+                            
+                            if (!data.playerArrived) {
+                                // AI만 통과: 메시지 표시, 게임 계속
+                                const messageBox = document.getElementById('messageBox');
+                                if (messageBox) {
+                                    messageBox.textContent = "🤖 AI 통과!";
+                                    messageBox.style.background = "#fff3cd";
+                                    messageBox.style.borderColor = "#ffc107";
+                                }
+                            }
+                            
+                            if (data.gameFinished) {
+                                location.reload();
+                            }
+                            // 플레이어만 도착: AI 계속 이동해야 함 (return 안 함)
+                            // Enemy만 도착: 아래에서 처리
+                            if (!data.playerArrived && data.enemyArrived && !data.gameFinished) {
+                                return;
+                            }
+                        }
+                        
+                        // 게임이 끝났으면 (둘 다 도착) 페이지 새로고침
                         if (data.gameFinished) {
                             if (aiMoveInterval) {
                                 clearTimeout(aiMoveInterval);
@@ -218,7 +270,8 @@
                         }
                     }
                     // 다음 이동 스케줄링 (요청 완료 후)
-                    if (!data.gameFinished) {
+                    // Enemy 도착 시에만 중단 (플레이어 도착 시엔 AI 계속 이동)
+                    if (!data.gameFinished && !data.enemyArrived) {
                         scheduleNextAiMove();
                     }
                 })

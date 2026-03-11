@@ -57,9 +57,6 @@ public class ReplayGenerator {
             } else if ("AI_MOVE".equalsIgnoreCase(type)) {
                 enemyX = e.getEnemyX();
                 enemyY = e.getEnemyY();
-            } else {
-                // 확장 이벤트 타입이 생겨도 좌표/메시지 기반으로 프레임은 구성
-                // (필요 시 여기서 추가 시뮬레이션)
             }
 
             ReplayFrame f = new ReplayFrame();

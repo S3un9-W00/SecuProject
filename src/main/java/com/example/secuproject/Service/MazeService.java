@@ -21,16 +21,17 @@ import java.util.List;
 @Service
 public class MazeService {
     private Maze_two maze;
-    private Enemy enemy; // AI 로봇 (오른손 법칙 사용)
+    private Enemy enemy;
     private boolean gameStarted = false;
     private boolean gameFinished = false;
     private boolean playerArrived = false;
     private boolean enemyArrived = false;
+    private boolean logSaved = false;
     private MazeGenerator generator;
     private MazeValidator validator;
     private final SecureRandom random = new SecureRandom();
-    private GameLogger gameLogger; // 게임 로그 기록기
-    private String lastSavedLogFile; // 최근 저장된 로그 파일 경로
+    private GameLogger gameLogger;
+    private String lastSavedLogFile;
 
     public MazeService() {
         this.generator = new MazeGenerator();
@@ -79,6 +80,7 @@ public class MazeService {
         gameFinished = false;
         playerArrived = false;
         enemyArrived = false;
+        logSaved = false;
 
         // 게임 로그 시작
         gameLogger.startNewGame(maze.getSize(), maze.getMap(),
@@ -165,6 +167,10 @@ public class MazeService {
             return new Maze_two.MoveResult(false, false, "게임을 시작해주세요.");
         }
         
+        if (playerArrived) {
+            return new Maze_two.MoveResult(false, false, "플레이어는 이미 도착했습니다. AI의 도착을 기다려주세요.");
+        }
+        
         Maze_two.MoveResult result = maze.move(dir);
         
         // 이동 로그 기록
@@ -180,14 +186,18 @@ public class MazeService {
         );
         
         // 도착했는지 확인
-        if (result.arrived) {
+        if (result.arrived && !playerArrived) {
             playerArrived = true;
-            gameFinished = true;
-            // 게임 종료 시 로그 자동 저장
-            String logFile = gameLogger.finishAndSave(playerArrived, enemyArrived);
-            if (logFile != null) {
-                lastSavedLogFile = logFile;
-                System.out.println("🎮 게임 완료 - 로그 저장됨: " + logFile);
+            // 한 명만 도착: 게임 계속 (gameFinished는 false 유지)
+            // 두 명 다 도착하면 gameFinished = true
+            if (playerArrived && enemyArrived) {
+                gameFinished = true;
+                logSaved = true;
+                String logFile = gameLogger.finishAndSave(playerArrived, enemyArrived);
+                if (logFile != null) {
+                    lastSavedLogFile = logFile;
+                    System.out.println("게임 완료 - 로그 저장됨: " + logFile);
+                }
             }
         }
         
@@ -218,14 +228,16 @@ public class MazeService {
             int ex = enemy.getX();
             int ey = enemy.getY();
             if (ex >= 0 && ex < map.length && ey >= 0 && ey < map[0].length) {
-                if (map[ex][ey] == 9) {
+                if (map[ex][ey] == 9 && !enemyArrived) {
                     enemyArrived = true;
-                    gameFinished = true;
-                    // 게임 종료 시 로그 자동 저장
-                    String logFile = gameLogger.finishAndSave(playerArrived, enemyArrived);
-                    if (logFile != null) {
-                        lastSavedLogFile = logFile;
-                        System.out.println("🎮 게임 완료 - 로그 저장됨: " + logFile);
+                    if (playerArrived && enemyArrived) {
+                        gameFinished = true;
+                        logSaved = true;
+                        String logFile = gameLogger.finishAndSave(playerArrived, enemyArrived);
+                        if (logFile != null) {
+                            lastSavedLogFile = logFile;
+                            System.out.println("게임 완료 - 로그 저장됨: " + logFile);
+                        }
                     }
                 }
             }
@@ -236,9 +248,8 @@ public class MazeService {
      * 게임 리셋 - 기존 로그 저장 후 새 게임 시작
      */
     public String reset() {
-        // 게임 종료 로그 저장
         String logFile = null;
-        if (gameLogger.getCurrentLog() != null) {
+        if (gameLogger.getCurrentLog() != null && !logSaved) {
             logFile = gameLogger.finishAndSave(playerArrived, enemyArrived);
             if (logFile != null) {
                 lastSavedLogFile = logFile;
@@ -252,8 +263,12 @@ public class MazeService {
      * 게임 로그 저장 (게임 종료 시)
      */
     public String saveGameLog() {
+        if (logSaved) {
+            return lastSavedLogFile;
+        }
         String logFile = gameLogger.finishAndSave(playerArrived, enemyArrived);
         if (logFile != null) {
+            logSaved = true;
             lastSavedLogFile = logFile;
         }
         return logFile;
@@ -271,6 +286,8 @@ public class MazeService {
         status.enemyY = enemy != null ? enemy.getY() : -1;
         status.gameStarted = gameStarted;
         status.gameFinished = gameFinished;
+        status.playerArrived = playerArrived;
+        status.enemyArrived = enemyArrived;
         return status;
     }
 
@@ -367,5 +384,7 @@ public class MazeService {
         public int enemyY;
         public boolean gameStarted;
         public boolean gameFinished;
+        public boolean playerArrived;
+        public boolean enemyArrived;
     }
 }

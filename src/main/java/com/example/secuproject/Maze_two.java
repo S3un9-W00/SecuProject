@@ -179,7 +179,9 @@ public class Maze_two {
                 boolean inView = Math.abs(i - playerX) <= viewRange &&
                         Math.abs(j - playerY) <= viewRange;
 
-                if (!inView) {
+                boolean inViewAtEnemy = Math.abs(i - enemyX) <= viewRange && Math.abs(j - enemyY) <= viewRange;
+
+                if (!inView && !inViewAtEnemy) {
                     sb.append(" ?");
                     continue;
                 }

@@ -77,6 +77,8 @@ public class GameController {
         response.put("enemyX", status.enemyX);
         response.put("enemyY", status.enemyY);
         response.put("gameFinished", status.gameFinished);
+        response.put("playerArrived", status.playerArrived);
+        response.put("enemyArrived", status.enemyArrived);
         
         return response;
     }
@@ -98,6 +100,8 @@ public class GameController {
         response.put("enemyX", status.enemyX);
         response.put("enemyY", status.enemyY);
         response.put("gameFinished", status.gameFinished);
+        response.put("playerArrived", status.playerArrived);
+        response.put("enemyArrived", status.enemyArrived);
         
         return response;
     }

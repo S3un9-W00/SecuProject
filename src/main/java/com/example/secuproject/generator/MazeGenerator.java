@@ -9,264 +9,365 @@ import java.util.*;
 public class MazeGenerator {
     private Random random;
     
+    private static final int[] DX = {-1, 1, 0, 0};
+    private static final int[] DY = {0, 0, -1, 1};
+    private static final int MAX_GENERATION_ATTEMPTS = 50;
+    
     public MazeGenerator() {
         this.random = new Random();
     }
     
-    /**
-     * N × N 크기의 미로를 생성합니다
-     * @param size 미로 크기
-     * @return 생성된 미로
-     */
     public Maze generateMaze(int size) {
         if (size < 5) {
-            size = 5; // 최소 크기 보장
+            size = 5;
         }
         
-        Maze maze = new Maze(size);
+        for (int attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {
+            Maze maze = new Maze(size);
+            
+            initializeAllWalls(maze, size);
+            
+            List<Position> starts = placeStartPoints(maze, size);
+            
+            generateMazeWithPrims(maze, starts, size);
+            
+            Position goal = placeGoalAtDepth(maze, starts, size);
+            if (goal == null) {
+                continue;
+            }
+            
+            if (validateMinimumPathLength(maze, size)) {
+                placeItems(maze, size);
+                initializeFog(maze, size);
+                return maze;
+            }
+        }
         
-        // 1단계: 기본 미로 구조 생성 (모든 칸을 벽으로 시작)
-        generateBasicMaze(maze, size);
-        
-        // 2단계: 스타트 지점 2개 배치
-        List<Position> starts = placeStartPoints(maze, size);
-        
-        // 3단계: 도착지점 배치
-        Position goal = placeGoal(maze, size, starts);
-        
-        // 4단계: 경로 생성 (최소 2개 이상의 경로 보장)
-        ensureMultiplePaths(maze, starts, goal);
-        
-        // 5단계: 아이템 배치
-        placeItems(maze, size);
-        
-        // 6단계: 안개 초기화 (모든 칸에 안개 코드 5 설정)
-        initializeFog(maze, size);
-        
-        return maze;
+        return generateFallbackMaze(size);
     }
     
-    /**
-     * 기본 미로 구조를 생성합니다 (길과 벽을 랜덤하게 배치)
-     */
-    private void generateBasicMaze(Maze maze, int size) {
-        // 중앙 부분에 길을 많이 만들고, 가장자리는 벽으로 유지
-        for (int i = 1; i < size - 1; i++) {
-            for (int j = 1; j < size - 1; j++) {
-                // 60% 확률로 길 생성
-                if (random.nextDouble() < 0.6) {
-                    maze.setCell(i, j, 3); // 길
-                }
+    private void initializeAllWalls(Maze maze, int size) {
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < size; j++) {
+                maze.setCell(i, j, 4);
             }
         }
     }
     
-    /**
-     * 스타트 지점 2개를 배치합니다
-     * 첫 번째: 맨 위쪽 중앙
-     * 두 번째: 맨 밑쪽 중앙
-     */
     private List<Position> placeStartPoints(Maze maze, int size) {
         List<Position> starts = new ArrayList<>();
         
-        // 첫 번째 스타트: 맨 위쪽 중앙
-        int x1 = 1; // 맨 위쪽 (가장자리 제외)
-        int y1 = size / 2; // 중앙
-        maze.setCell(x1, y1, 0);
-        starts.add(new Position(x1, y1));
+        int midY = size / 2;
         
-        // 두 번째 스타트: 맨 밑쪽 중앙
-        int x2 = size - 2; // 맨 밑쪽 (가장자리 제외)
-        int y2 = size / 2; // 중앙
-        maze.setCell(x2, y2, 0);
-        starts.add(new Position(x2, y2));
+        int x1 = 1;
+        maze.setCell(x1, midY, 0);
+        starts.add(new Position(x1, midY));
         
-        // 스타트 지점 주변을 길로 만듭니다
-        for (Position start : starts) {
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dy = -1; dy <= 1; dy++) {
-                    int x = start.getX() + dx;
-                    int y = start.getY() + dy;
-                    if (maze.isValidPosition(x, y) && !(dx == 0 && dy == 0)) {
-                        maze.setCell(x, y, 3); // 길
-                    }
-                }
-            }
-        }
+        int x2 = size - 2;
+        maze.setCell(x2, midY, 0);
+        starts.add(new Position(x2, midY));
         
         return starts;
     }
     
-    /**
-     * 도착지점을 배치합니다
-     */
-    private Position placeGoal(Maze maze, int size, List<Position> starts) {
-        // 스타트 지점들과 멀리 떨어진 곳에 배치
-        Position goal = null;
-        int attempts = 0;
+    private void generateMazeWithPrims(Maze maze, List<Position> starts, int size) {
+        Set<String> visited = new HashSet<>();
         
-        while (goal == null && attempts < 100) {
-            int x = size / 2 + random.nextInt(size / 3) - size / 6;
-            int y = size / 2 + random.nextInt(size / 3) - size / 6;
+        for (Position start : starts) {
+            visited.add(start.getX() + "," + start.getY());
+        }
+        
+        carveMazeDFS(maze, starts.get(0), size, visited, -1);
+        
+        if (starts.size() > 1) {
+            Position start2 = starts.get(1);
+            String key2 = start2.getX() + "," + start2.getY();
             
-            // 스타트 지점들과 충분히 떨어져 있는지 확인
-            boolean farEnough = true;
+            if (!visited.contains(key2) || calculateShortestPath(maze, starts.get(0), start2) < 0) {
+                carvePathBetweenStarts(maze, starts, visited, size);
+            }
+        }
+    }
+    
+    private void carveMazeDFS(Maze maze, Position start, int size, Set<String> visited, int lastDir) {
+        Stack<int[]> stack = new Stack<>();
+        stack.push(new int[]{start.getX(), start.getY(), lastDir});
+        
+        while (!stack.isEmpty()) {
+            int[] current = stack.peek();
+            int x = current[0], y = current[1], prevDir = current[2];
+            
+            List<int[]> neighbors = new ArrayList<>();
+            for (int dir = 0; dir < 4; dir++) {
+                int nx = x + DX[dir] * 2;
+                int ny = y + DY[dir] * 2;
+                
+                if (nx > 0 && nx < size - 1 && ny > 0 && ny < size - 1) {
+                    String key = nx + "," + ny;
+                    if (!visited.contains(key)) {
+                        neighbors.add(new int[]{nx, ny, dir});
+                    }
+                }
+            }
+            
+            if (neighbors.isEmpty()) {
+                stack.pop();
+                continue;
+            }
+            
+            int[] chosen = null;
+            if (prevDir >= 0 && random.nextDouble() < 0.7) {
+                for (int[] n : neighbors) {
+                    if (n[2] == prevDir) {
+                        chosen = n;
+                        break;
+                    }
+                }
+            }
+            if (chosen == null) {
+                chosen = neighbors.get(random.nextInt(neighbors.size()));
+            }
+            
+            int nx = chosen[0], ny = chosen[1], dir = chosen[2];
+            
+            int wx = x + DX[dir];
+            int wy = y + DY[dir];
+            
+            maze.setCell(wx, wy, 3);
+            maze.setCell(nx, ny, 3);
+            
+            visited.add(wx + "," + wy);
+            visited.add(nx + "," + ny);
+            
+            stack.push(new int[]{nx, ny, dir});
+        }
+    }
+    
+    private void carvePathBetweenStarts(Maze maze, List<Position> starts, Set<String> visited, int size) {
+        Position start1 = starts.get(0);
+        Position start2 = starts.get(1);
+        
+        Queue<Position> queue = new LinkedList<>();
+        Map<String, Position> parent = new HashMap<>();
+        
+        String key2 = start2.getX() + "," + start2.getY();
+        queue.add(start2);
+        parent.put(key2, null);
+        
+        Position target = null;
+        while (!queue.isEmpty() && target == null) {
+            Position curr = queue.poll();
+            
+            for (int i = 0; i < 4; i++) {
+                int nx = curr.getX() + DX[i];
+                int ny = curr.getY() + DY[i];
+                
+                if (nx <= 0 || nx >= size - 1 || ny <= 0 || ny >= size - 1) continue;
+                
+                String nkey = nx + "," + ny;
+                if (parent.containsKey(nkey)) continue;
+                
+                parent.put(nkey, curr);
+                
+                MazeCell cell = maze.getCell(nx, ny);
+                if (cell.getCode() == 3 || cell.getCode() == 0) {
+                    target = new Position(nx, ny);
+                    break;
+                }
+                
+                queue.add(new Position(nx, ny));
+            }
+        }
+        
+        if (target != null) {
+            Position curr = target;
+            while (curr != null) {
+                String key = curr.getX() + "," + curr.getY();
+                MazeCell cell = maze.getCell(curr.getX(), curr.getY());
+                if (cell.getCode() == 4) {
+                    maze.setCell(curr.getX(), curr.getY(), 3);
+                    visited.add(key);
+                }
+                curr = parent.get(key);
+            }
+        }
+    }
+    
+    private void addNeighborWallsToFrontier(Maze maze, Position cell, 
+            Set<String> passages, Set<String> frontier, int size) {
+        
+        for (int i = 0; i < 4; i++) {
+            int nx = cell.getX() + DX[i];
+            int ny = cell.getY() + DY[i];
+            String key = nx + "," + ny;
+            
+            if (nx > 0 && nx < size - 1 && ny > 0 && ny < size - 1) {
+                if (!passages.contains(key)) {
+                    frontier.add(key);
+                }
+            }
+        }
+    }
+    
+    private List<Position> getPassageNeighbors(Position cell, Set<String> passages, int size) {
+        List<Position> neighbors = new ArrayList<>();
+        
+        for (int i = 0; i < 4; i++) {
+            int nx = cell.getX() + DX[i];
+            int ny = cell.getY() + DY[i];
+            String key = nx + "," + ny;
+            
+            if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
+                if (passages.contains(key)) {
+                    neighbors.add(new Position(nx, ny));
+                }
+            }
+        }
+        return neighbors;
+    }
+    
+    private List<Position> getNonPassageNeighbors(Position cell, Set<String> passages, int size) {
+        List<Position> neighbors = new ArrayList<>();
+        
+        for (int i = 0; i < 4; i++) {
+            int nx = cell.getX() + DX[i];
+            int ny = cell.getY() + DY[i];
+            String key = nx + "," + ny;
+            
+            if (nx > 0 && nx < size - 1 && ny > 0 && ny < size - 1) {
+                if (!passages.contains(key)) {
+                    neighbors.add(new Position(nx, ny));
+                }
+            }
+        }
+        return neighbors;
+    }
+    
+    private String pickRandomFromSet(Set<String> set) {
+        int index = random.nextInt(set.size());
+        int i = 0;
+        for (String item : set) {
+            if (i == index) {
+                return item;
+            }
+            i++;
+        }
+        return set.iterator().next();
+    }
+    
+    private Position parsePosition(String key) {
+        String[] parts = key.split(",");
+        return new Position(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
+    }
+    
+    private Position placeGoalAtDepth(Maze maze, List<Position> starts, int size) {
+        int minDepth = size * 2;
+        
+        List<Position> walkableCells = new ArrayList<>();
+        for (int i = 1; i < size - 1; i++) {
+            for (int j = 1; j < size - 1; j++) {
+                MazeCell cell = maze.getCell(i, j);
+                if (cell.getCode() == 3) {
+                    walkableCells.add(new Position(i, j));
+                }
+            }
+        }
+        
+        List<Position> candidates = new ArrayList<>();
+        
+        for (Position cell : walkableCells) {
+            boolean validForAllStarts = true;
+            
             for (Position start : starts) {
-                int distance = Math.abs(x - start.getX()) + Math.abs(y - start.getY());
-                if (distance < size / 2) {
-                    farEnough = false;
+                int dist = calculateShortestPath(maze, start, cell);
+                if (dist < 0 || dist < minDepth) {
+                    validForAllStarts = false;
                     break;
                 }
             }
             
-            if (farEnough) {
-                maze.setCell(x, y, 9); // 도착지점
-                goal = new Position(x, y);
-                // 도착지점 주변을 길로 만듭니다
-                for (int dx = -1; dx <= 1; dx++) {
-                    for (int dy = -1; dy <= 1; dy++) {
-                        int nx = x + dx;
-                        int ny = y + dy;
-                        if (maze.isValidPosition(nx, ny) && !(dx == 0 && dy == 0)) {
-                            maze.setCell(nx, ny, 3); // 길
-                        }
-                    }
-                }
+            if (validForAllStarts) {
+                candidates.add(cell);
             }
-            attempts++;
         }
         
-        // 시도 실패 시 중앙에 배치
-        if (goal == null) {
-            int x = size / 2;
-            int y = size / 2;
-            maze.setCell(x, y, 9);
-            goal = new Position(x, y);
+        if (candidates.isEmpty()) {
+            return null;
         }
         
+        Position goal = candidates.get(random.nextInt(candidates.size()));
+        maze.setCell(goal.getX(), goal.getY(), 9);
         return goal;
     }
     
-    /**
-     * 최소 2개 이상의 경로를 보장합니다
-     */
-    private void ensureMultiplePaths(Maze maze, List<Position> starts, Position goal) {
-        // 각 스타트 지점에서 도착지점까지 경로가 있는지 확인하고, 없으면 경로를 만듭니다
-        for (Position start : starts) {
-            // BFS로 경로 확인
-            if (!hasPath(maze, start, goal)) {
-                // 경로가 없으면 경로를 만듭니다
-                createPath(maze, start, goal);
-            }
-        }
-        
-        // 최소 2개 이상의 경로가 있는지 확인하고, 없으면 추가 경로를 만듭니다
-        int pathCount = countPaths(maze, starts, goal);
-        if (pathCount < 2) {
-            // 추가 경로 생성
-            createAdditionalPath(maze, starts, goal);
-        }
-    }
-    
-    /**
-     * 두 지점 사이에 경로가 있는지 확인합니다 (BFS 사용)
-     */
-    private boolean hasPath(Maze maze, Position start, Position goal) {
+    private int calculateShortestPath(Maze maze, Position start, Position goal) {
         Queue<Position> queue = new LinkedList<>();
-        Set<String> visited = new HashSet<>();
+        Map<String, Integer> distance = new HashMap<>();
         
+        String startKey = start.getX() + "," + start.getY();
         queue.add(start);
-        visited.add(start.getX() + "," + start.getY());
-        
-        int[] dx = {-1, 1, 0, 0};
-        int[] dy = {0, 0, -1, 1};
+        distance.put(startKey, 0);
         
         while (!queue.isEmpty()) {
             Position current = queue.poll();
+            String currentKey = current.getX() + "," + current.getY();
+            int currentDist = distance.get(currentKey);
             
             if (current.equals(goal)) {
-                return true;
+                return currentDist;
             }
             
             for (int i = 0; i < 4; i++) {
-                int nx = current.getX() + dx[i];
-                int ny = current.getY() + dy[i];
+                int nx = current.getX() + DX[i];
+                int ny = current.getY() + DY[i];
                 String key = nx + "," + ny;
                 
-                if (maze.isValidPosition(nx, ny) && !visited.contains(key)) {
+                if (maze.isValidPosition(nx, ny) && !distance.containsKey(key)) {
                     MazeCell cell = maze.getCell(nx, ny);
-                    if (cell.isWalkable() || cell.getCode() == 9) {
-                        visited.add(key);
+                    if (cell.isWalkable() || cell.getCode() == 9 || cell.getCode() == 0) {
+                        distance.put(key, currentDist + 1);
                         queue.add(new Position(nx, ny));
                     }
                 }
             }
         }
         
-        return false;
+        return -1;
     }
     
-    /**
-     * 두 지점 사이에 경로를 생성합니다
-     */
-    private void createPath(Maze maze, Position start, Position goal) {
-        // A* 알고리즘과 유사하게 직선 경로를 만들되, 장애물을 피합니다
-        int currentX = start.getX();
-        int currentY = start.getY();
+    private boolean validateMinimumPathLength(Maze maze, int size) {
+        int minimumRequired = size * 2;
         
-        while (!(currentX == goal.getX() && currentY == goal.getY())) {
-            // 목표 방향으로 이동
-            int dx = Integer.compare(goal.getX(), currentX);
-            int dy = Integer.compare(goal.getY(), currentY);
-            
-            // 우선순위: 대각선 이동 > 수평/수직 이동
-            if (dx != 0 && dy != 0 && random.nextBoolean()) {
-                currentX += dx;
-            } else if (dy != 0) {
-                currentY += dy;
-            } else if (dx != 0) {
-                currentX += dx;
-            }
-            
-            // 범위 체크
-            if (maze.isValidPosition(currentX, currentY)) {
-                maze.setCell(currentX, currentY, 3); // 길로 만듭니다
-            } else {
-                break;
+        List<Position> starts = new ArrayList<>();
+        Position goal = null;
+        
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < size; j++) {
+                MazeCell cell = maze.getCell(i, j);
+                if (cell.getCode() == 0) {
+                    starts.add(new Position(i, j));
+                } else if (cell.getCode() == 9) {
+                    goal = new Position(i, j);
+                }
             }
         }
-    }
-    
-    /**
-     * 경로의 개수를 세어봅니다 (대략적인 추정)
-     */
-    private int countPaths(Maze maze, List<Position> starts, Position goal) {
-        int count = 0;
+        
+        if (goal == null || starts.isEmpty()) {
+            return false;
+        }
+        
         for (Position start : starts) {
-            if (hasPath(maze, start, goal)) {
-                count++;
+            int pathLength = calculateShortestPath(maze, start, goal);
+            if (pathLength < 0 || pathLength < minimumRequired) {
+                return false;
             }
         }
-        return count;
+        
+        return true;
     }
     
-    /**
-     * 추가 경로를 생성합니다
-     */
-    private void createAdditionalPath(Maze maze, List<Position> starts, Position goal) {
-        // 첫 번째 스타트에서 다른 경로로 도착지점까지 가는 경로를 만듭니다
-        if (!starts.isEmpty()) {
-            Position start = starts.get(0);
-            // 기존 경로와 다른 경로를 만들기 위해 약간 다른 방향으로 시작
-            createPath(maze, start, goal);
-        }
-    }
-    
-    /**
-     * 아이템을 배치합니다
-     */
     private void placeItems(Maze maze, int size) {
-        int itemCount = size / 3; // 미로 크기에 비례하여 아이템 개수 결정
+        int itemCount = size / 3;
         
         for (int i = 0; i < itemCount; i++) {
             int attempts = 0;
@@ -275,9 +376,8 @@ public class MazeGenerator {
                 int y = 1 + random.nextInt(size - 2);
                 
                 MazeCell cell = maze.getCell(x, y);
-                // 길 위에만 아이템 배치
                 if (cell.getCode() == 3) {
-                    maze.setCell(x, y, 6); // 아이템
+                    maze.setCell(x, y, 6);
                     break;
                 }
                 attempts++;
@@ -285,12 +385,58 @@ public class MazeGenerator {
         }
     }
     
-    /**
-     * 안개를 초기화합니다 (모든 칸에 안개 코드 5 설정)
-     */
     private void initializeFog(Maze maze, int size) {
-        // 안개는 게임 중 동적으로 처리되므로 여기서는 기본 설정만 합니다
-        // 실제 안개는 Maze 클래스의 updateVisibility에서 처리됩니다
+    }
+    
+    private Maze generateFallbackMaze(int size) {
+        Maze maze = new Maze(size);
+        
+        initializeAllWalls(maze, size);
+        List<Position> starts = placeStartPoints(maze, size);
+        generateMazeWithPrims(maze, starts, size);
+        
+        List<Position> walkableCells = new ArrayList<>();
+        for (int i = 1; i < size - 1; i++) {
+            for (int j = 1; j < size - 1; j++) {
+                MazeCell cell = maze.getCell(i, j);
+                if (cell.getCode() == 3) {
+                    walkableCells.add(new Position(i, j));
+                }
+            }
+        }
+        
+        Position bestGoal = null;
+        int bestMinDist = -1;
+        
+        for (Position cell : walkableCells) {
+            int minDistFromStarts = Integer.MAX_VALUE;
+            boolean reachable = true;
+            
+            for (Position start : starts) {
+                int dist = calculateShortestPath(maze, start, cell);
+                if (dist < 0) {
+                    reachable = false;
+                    break;
+                }
+                minDistFromStarts = Math.min(minDistFromStarts, dist);
+            }
+            
+            if (reachable && minDistFromStarts > bestMinDist) {
+                bestMinDist = minDistFromStarts;
+                bestGoal = cell;
+            }
+        }
+        
+        if (bestGoal != null) {
+            maze.setCell(bestGoal.getX(), bestGoal.getY(), 9);
+        } else if (!walkableCells.isEmpty()) {
+            Position goal = walkableCells.get(random.nextInt(walkableCells.size()));
+            maze.setCell(goal.getX(), goal.getY(), 9);
+        }
+        
+        placeItems(maze, size);
+        initializeFog(maze, size);
+        
+        return maze;
     }
 }
-
